@@ -1,0 +1,4 @@
+local custom_hitsound_enable = Menu.Switch("Other", "Custom Hitsound", false, "Custom Hitsound")
+local hitsound_path = Menu.TextBox("Other", "Hitsound Path", 256, "buttons/arena_switch_press_02.wav")
+function custom_hitsound(e) local victim, attacker = EntityList.GetPlayerForUserID(e:GetInt("userid")), EntityList.GetPlayerForUserID(e:GetInt("attacker")) if e:GetName() == "player_hurt" and attacker == EntityList.GetLocalPlayer() then EngineClient.ExecuteClientCmd("play " .. hitsound_path:Get()) end end
+Cheat.RegisterCallback("events", function(e) if custom_hitsound_enable:Get() then custom_hitsound(e) end end)
