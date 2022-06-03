@@ -1,0 +1,145 @@
+local holo_hud = Menu.Switch("Holo Hud", "Enable", false)
+local holo_hud_x =  Menu.SliderInt("Holo Hud", "x", 0, -60, 60)
+local holo_hud_y = Menu.SliderInt("Holo Hud", "y", 0, -60, 60)
+local hod_animation_speed = Menu.SliderFloat("Holo Hud", "Animation Line Speed", 3.0, 1.0, 10.0)
+local font2 = Render.InitFont("Smallest Pixel-7", 10, {"r"})
+local verdana12 = Render.InitFont("Verdana", 12)
+local value_Key,alpha_Key,add_Key,fade_factor,prev_pos2,size2 = 0,0,0,(1 / .15 * GlobalVars.frametime * 200) / 200,nil,Vector2.new(140, 50)
+local function vec2_add2(v0, v1) return Vector2.new(v0.x + v1.x, v0.y + v1.y) end
+local function vec2_dec2(v0, v1) return Vector2.new(v0.x - v1.x, v0.y - v1.y) end
+local function vec2_smooth2(vec, s) return Vector2.new(vec.x / s, vec.y / s) end
+local function hsv_to_rgb2(b,c,d)local e,f,g,h,i,j,k,l;h=math.floor(b*6)i=b*6-h;j=d*(1-c)k=d*(1-i*c)l=d*(1-(1-i)*c)function switch(m)if m==0 then e=d;f=l;g=j end;if m==1 then e=k;f=d;g=j end;if m==2 then e=j;f=d;g=l end;if m==3 then e=j;f=k;g=d end;if m==4 then e=l;f=j;g=d end;if m==5 then e=d;f=j;g=k end end;switch(h%6)return{r=math.ceil(e*255),g=math.ceil(f*255),b=math.ceil(g*255)}end
+local function clamp(value, min, max) return math.min(math.max(value, min), max) end
+local function local_is_alive() local me = EntityList.GetLocalPlayer() if not me then  return false  end local hp = me:GetProp("m_iHealth") if not hp then  return false  end return me:GetProp("m_iHealth") > 0 end
+local function render_gradient_box(x, y, w, h, gradient_one, gradient_two, gradient_three) Render.GradientBoxFilled(Vector2.new(x, y), Vector2.new(x + w / 2, y - h),  gradient_one, gradient_two, gradient_one, gradient_two) Render.GradientBoxFilled(Vector2.new(x + w, y), Vector2.new(x + w / 2, y - h), gradient_three, gradient_two, gradient_three, gradient_two) end
+local function normalize_yaw(yaw3) while yaw3 > 180 do yaw3 = yaw3 - 360 end while yaw3 < -180 do yaw3 = yaw3 + 360 end return yaw3 end
+local i_client_entity_list = Utils.CreateInterface("client.dll", "VClientEntityList003");
+ffi.cdef('typedef struct { float x; float y; float z; } bbvec3_t;')
+local seen = {}
+local function vtable_thunk(index, typedef)
+  return function(v0, ...)
+    local instance = ffi.cast(ffi.typeof('void***'), v0)
+    local tdef = nil
+    if seen[typedef] then
+        tdef = seen[typedef]
+    else
+        tdef = ffi.typeof(typedef)
+
+        seen[typedef] = tdef
+    end
+    return ffi.cast(tdef, instance[0][index])(instance, ...)
+  end
+end
+local function vtable_bind(interface, index, typedef) 
+    local instance = ffi.cast('void***', interface);
+    return function(...) 
+        return ffi.cast(typedef, instance[0][index])(instance, ...)
+    end
+end
+local IEngine = Utils.CreateInterface("engine.dll", "VEngineClient014")
+local get_client_entity = vtable_thunk(3, 'void*(__thiscall*)(void*, int)')
+local get_attachment = vtable_thunk(84, "bool(__thiscall*)(void*, int, bbvec3_t&)")
+local get_muzzle_attachment_index_first_person = vtable_thunk(468, "int(__thiscall*)(void*, void*)")
+local get_muzzle_attachment_index_third_person = vtable_thunk(469, "int(__thiscall*)(void*)")
+local get_attachment_vector = function (world_model)
+    local local_player = EntityList.GetLocalPlayer()
+    if not local_player or local_player:GetProp("m_iHealth") < 1 then
+        return
+    end
+    local active_weapon_handle = local_player:GetProp("DT_BaseCombatCharacter", "m_hActiveWeapon")
+    local active_weapon = EntityList.GetClientEntityFromHandle(active_weapon_handle)
+	local wep = local_player:GetActiveWeapon()
+	if wep ~= nil then
+    local weapon_world_model_handle = wep:GetProp('DT_BaseCombatWeapon', 'm_hWeaponWorldModel');
+    local weapon_world_model = EntityList.GetClientEntityFromHandle(weapon_world_model_handle);
+    local view_model_handle = local_player:GetProp('DT_BasePlayer', 'm_hViewModel[0]');
+    local view_model = EntityList.GetClientEntityFromHandle(view_model_handle);
+    local model = world_model and weapon_world_model or view_model;
+    local active_weapon_state, active_weapon = pcall(get_client_entity, i_client_entity_list, active_weapon:EntIndex())
+    if not active_weapon_state then return end
+    local g_model_state, g_model = pcall(get_client_entity, i_client_entity_list, model:EntIndex())
+    if not g_model_state then return end
+    if active_weapon == nil or g_model == nil then
+      return
+    end
+    local attachment_vector = ffi.new("bbvec3_t[1]")
+    local attachment_index = world_model and
+       get_muzzle_attachment_index_third_person(active_weapon) or
+       get_muzzle_attachment_index_first_person(active_weapon, g_model)
+       if attachment_index > 0 and get_attachment(g_model, attachment_index, attachment_vector[0]) then
+          return Vector.new(attachment_vector[0].x, attachment_vector[0].y, attachment_vector[0].z)
+       end
+	end
+end
+
+local function HoloHud()
+  if Exploits.GetCharge() == 1 then value_Key = clamp(value_Key + fade_factor, 0, 1) alpha_Key = clamp(alpha_Key + fade_factor * value_Key, 0, 1) add_Key   = clamp(add_Key   + fade_factor * value_Key, 0, 1)  else value_Key = clamp(value_Key - fade_factor, 0, 1) alpha_Key = clamp(alpha_Key - fade_factor * alpha_Key, 0, 1) add_Key   = clamp(add_Key   - fade_factor * add_Key, 0, 1) end
+	if(alpha_Key < 0.01) then alpha_Key = 0 end
+	if(add_Key < 0.01) then add_Key   = 0  end
+    if Menu.FindVar("Visuals", "View", "Thirdperson", "Enable Thirdperson"):Get() == true then
+        return
+    end
+	local pos = get_attachment_vector(false)
+	if pos then
+	   local w2s2 = Render.WorldToScreen(pos)
+     w2s2.x = clamp(w2s2.x, -8000, 8000)
+     w2s2.y = clamp(w2s2.y, -8000, 8000)
+     if not prev_pos2 then prev_pos2 = w2s2 end
+	   local x,y,rbg,rbg = holo_hud_x:Get(),holo_hud_y:Get(),hsv_to_rgb2(GlobalVars.realtime / hod_animation_speed:Get(), 1, 1)
+     local gradient_one,gradient_two,gradient_three = Color.new(rbg.r/255, rbg.g/255, rbg.b/255, 255/255),Color.new(rbg.b/255, rbg.r/255, rbg.g/255, 255/255),Color.new(rbg.g/255, rbg.b/255, rbg.r/255, 255/255)
+	   local real_rotation2,desync_rotation2,max_desync_delta2,min_desync_delta2 = AntiAim.GetCurrentRealRotation(),AntiAim.GetFakeRotation(),AntiAim.GetMaxDesyncDelta(),AntiAim.GetMinDesyncDelta()
+     local desync_delta2 = real_rotation2 - desync_rotation2
+     if desync_delta2 > max_desync_delta2 then desync_delta2 = max_desync_delta2elseif (desync_delta2 < min_desync_delta2) then desync_delta2 = min_desync_delta2 end
+	   local desync = math.min(math.abs(desync_delta2*58/56), 60)
+     local view_angles = EngineClient.GetViewAngles()
+	   local yaw = normalize_yaw(view_angles.yaw - AntiAim.GetCurrentRealRotation() -  120)
+	   local h = 18
+	   local add_y_2 = 0
+       local diff = vec2_dec2(w2s2, prev_pos2)
+       local nextpos = vec2_smooth2(diff, 40)
+       prev_pos2 = vec2_add2(prev_pos2, nextpos)
+       local pos2d = prev_pos2
+       local x2 = pos2d.x + 70 + x
+       local y2 = pos2d.y + 40 + y
+	     add_y_2 = add_y_2 + add_Key * 12
+	     local size = Vector2.new(140, 50)
+	     local vec = Vector2.new(pos2d.x - 30 +x, pos2d.y - size.y - 58 +y)
+	     Render.Line(Vector2.new(w2s2.x,w2s2.y), Vector2.new(pos2d.x - 30 + x, pos2d.y - 40+math.floor(add_y_2) + y), Color.new(1.0, 1.0, 1.0, 0.4))
+	     Render.CircleFilled(w2s2, 3, 30, Color.new(1, 1, 1, 1))
+       Render.BoxFilled(Vector2.new(pos2d.x - 30 +x, pos2d.y - size.y - 58 +y), Vector2.new(vec.x + size.x + 25, vec.y + size.y + 20 +math.floor(add_y_2)), Color.new(0, 0, 0, 80 / 255))
+	     render_gradient_box(vec.x - size.x + 140, vec.y+3, 165, 2, gradient_one, gradient_two, gradient_three)
+	     Render.Text("ANTI-AIMBOT DEBUG", vec + Vector2.new(7, 10), Color.new(1.0, 1.0, 1.0, 1.0), 10, font2)
+	     Render.Text("ANTI-AIMBOT DEBUG", vec + Vector2.new(7, 10), Color.new(10,10,10,250), 10, font2,true)
+	     Render.Text("FAKE ( "..string.format("%.1f°)", desync), vec + Vector2.new(13, 35), Color.new(10,10,10,250), 12, verdana12)
+	     Render.GradientBoxFilled(Vector2.new(pos2d.x - 22+x, pos2d.y -68+y), Vector2.new(pos2d.x - 24+x, pos2d.y-77+y),Color.new((183 + (-33) * desync / 60) / 255, (207 * desync / 60) / 255, (50 * desync / 60) / 255, 20), Color.new((183 + (-33) * desync / 60) / 255, (207 * desync / 60) / 255, (50 * desync / 60) / 255, 20), Color.new(0, 0, 0, 0), Color.new(0, 0, 0, 0))
+	     Render.GradientBoxFilled(Vector2.new(pos2d.x - 22+x, pos2d.y -57+y), Vector2.new(pos2d.x - 24+x, pos2d.y-68+y),Color.new(0, 0, 0, 0), Color.new(0, 0, 0, 0), Color.new((183 + (-33) * desync / 60) / 255, (207 * desync / 60) / 255, (50 * desync / 60) / 255, 20), Color.new((183 + (-33) * desync / 60) / 255, (207 * desync / 60) / 255, (50 * desync / 60) / 255, 20))
+       Render.Text("SP:", vec + Vector2.new(7, 55), Color.new(1.0, 1.0, 1.0, 1.0), 10, font2)
+	     Render.Text("SP:", vec + Vector2.new(7, 55), Color.new(10,10,10,250), 10, font2,true)
+       Render.BoxFilled(Vector2.new(pos2d.x + x - 5, pos2d.y-52 +y), Vector2.new(pos2d.x +x + 30, pos2d.y +y + h - 64),Color.new(0, 0, 0, 80 / 255), 10)
+       Render.BoxFilled(Vector2.new(pos2d.x + x + 40, pos2d.y-52 +y), Vector2.new(pos2d.x +x + 70, pos2d.y +y + h - 64),Color.new(0, 0, 0, 80 / 255), 10)
+	     if AntiAim.GetInverterState() then
+          Render.BoxFilled(Vector2.new(pos2d.x + x - 5, pos2d.y-52 +y), Vector2.new(pos2d.x +x + (desync / 2), pos2d.y +y + h - 65),Color.new(1.0, 1.0, 1.0, 1.0), 10)
+	     else
+          Render.BoxFilled(Vector2.new(pos2d.x + x + 40, pos2d.y-52 +y), Vector2.new(pos2d.x +x + 40 + (desync / 2), pos2d.y +y + h - 65),Color.new(1.0, 1.0, 1.0, 1.0), 10)
+	     end
+	     Render.Text("OSAA:", vec + Vector2.new(120, 55), Color.new(1.0, 1.0, 1.0, 1.0), 10, font2)
+	     Render.Text("OSAA:", vec + Vector2.new(120, 55), Color.new(10,10,10,250), 10, font2,true)
+       local state = "OFF"
+       local os_color = Color.RGBA(255, 0, 0, 255) 
+       if Menu.FindVar("Aimbot", "Ragebot", "Exploits", "Hide Shots"):Get() then 
+          state = "ON"
+          os_color = Color.RGBA(0, 255, 0, 255)
+       end
+	     Render.Text(state, vec + Vector2.new(145, 55), Color.new(1.0, 1.0, 1.0, 1.0), 10, font2)
+	     Render.Text(state, vec + Vector2.new(145, 55), os_color, 10, font2,true)
+	     Render.Circle(vec + Vector2.new(135, 25), 11, 58, Color.new(0, 0, 0, 80 / 255), 3.0)
+	     Render.Circle(vec + Vector2.new(135, 25), 11, 58, Color.new(1.0, 1.0, 1.0, 1.0), 3.0, yaw, yaw + 56)
+	     if alpha_Key > 0  then
+	       Render.Text("EXPLOITING:", vec + Vector2.new(7, 55+math.floor(add_y_2)), Color.new(1.0, 1.0, 1.0, alpha_Key* 1.0/255), 10, font2)
+	       Render.Text("EXPLOITING:", vec + Vector2.new(7, 55+math.floor(add_y_2)), Color.new(10,10,10,alpha_Key* 250/255), 10, font2,true)
+         Render.BoxFilled(Vector2.new(pos2d.x + x + 90, pos2d.y-50 +y+math.floor(add_y_2)), Vector2.new(pos2d.x +x + 120, pos2d.y +y+math.floor(add_y_2) + h - 62),Color.new(0, 0, 0, 80 / 255), 10)
+         Render.BoxFilled(Vector2.new(pos2d.x + x + 90, pos2d.y-50 +y+math.floor(add_y_2)), Vector2.new(pos2d.x +x + 90+Exploits.GetCharge() * 35, pos2d.y +y+math.floor(add_y_2) + h - 62),Color.new(10,10,10, alpha_Key*250 / 255), 10)
+	    end
+	 end   
+end
+Cheat.RegisterCallback('draw', function() if local_is_alive() then if holo_hud:Get() then HoloHud() end end end)
