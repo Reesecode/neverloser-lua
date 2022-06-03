@@ -1,0 +1,44 @@
+local Grenade_Inventory_Enable = Menu.SwitchColor("Visuals", "Grenade Inventory Enable", false, Color.new(1.0, 1.0, 1.0))
+function local_is_alive() local me = EntityList.GetLocalPlayer() if not me then  return false  end local hp = me:GetProp("m_iHealth") if not hp then return false end return me:GetProp("m_iHealth") > 0 end
+
+-------------------------Visuals Grenade Inventory---------------------------------
+function C_BasePlayer:Distance(ent)
+    local origin = self:GetProp("DT_BaseEntity", "m_vecOrigin")
+    local origin2 = ent:GetProp("DT_BaseEntity", "m_vecOrigin")
+    return origin:DistTo(origin2)
+end
+function Grenade_Inventory()
+	local local_index = EngineClient.GetLocalPlayer()
+	local players = EntityList.GetEntitiesByName("CCSPlayer")
+	local x = math.floor(EngineClient.GetScreenSize().x / 2)
+	local y = math.floor(EngineClient.GetScreenSize().y / 2)
+  local local_player = EntityList.GetClientEntity(local_index):GetPlayer()
+	for i = 1, #players do
+	    local enemies = players[i]
+	    local enemy = enemies:GetPlayer()
+	    local weapons = enemy:GetProp("m_hMyWeapons")
+      local enemy_vector = enemy:GetProp("m_vecOrigin")
+      local distance = local_player:Distance(enemy)
+      enemy_vector = Vector.new(enemy_vector.x,enemy_vector.y,enemy_vector.z + distance / 70 )
+      local enemy_render = Render.ScreenPosition(enemy_vector)
+	    if enemy ~= local_player and not enemy:IsTeamMate() then 
+	        local inv = {}
+	        for _, handle in ipairs(weapons) do local entity = ((EntityList.GetWeaponFromHandle(handle))) table.insert(inv, entity) end
+	        local u = 0
+          local top_color = Grenade_Inventory_Enable:GetColor()
+          local yanser, yanseg, yanseb, yansea = top_color.r, top_color.g ,top_color.b, top_color.a
+	        for _, weapon in ipairs(inv) do
+	           local weapon_id = weapon:GetWeaponID()
+	           if weapon_id ~= 43 and weapon_id ~= 44 and weapon_id ~= 45 and weapon_id ~= 46 and weapon_id ~= 47 and weapon_id ~= 48 then goto skip end
+	           u = u + 1
+             local add_value = 13
+             if weapon_id == 43 or weapon_id == 44 or weapon_id == 47 then add_value = 12 end
+             if weapon_id == 46  then weapon_id = 48 end
+	           Render.WeaponIcon(weapon_id, Vector2.new(enemy_render.x + 1 + 25  + add_value * u - distance / 50,enemy_render.y  + 1 ), Color.new(yanser, yanseg, yanseb,1 * enemy:GetESPAlpha()) , 17)
+	           ::skip::
+	        end
+	    end
+	end
+end
+
+Cheat.RegisterCallback('draw', function() if local_is_alive() then if Grenade_Inventory_Enable:Get() then Grenade_Inventory() end end end)
