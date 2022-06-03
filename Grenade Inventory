@@ -26,7 +26,6 @@ function Grenade_Inventory()
 	        for _, handle in ipairs(weapons) do local entity = ((EntityList.GetWeaponFromHandle(handle))) table.insert(inv, entity) end
 	        local u = 0
                 local top_color = Grenade_Inventory_Enable:GetColor()
-                local yanser, yanseg, yanseb, yansea = top_color.r, top_color.g ,top_color.b, top_color.a
 	        for _, weapon in ipairs(inv) do
 	           local weapon_id = weapon:GetWeaponID()
 	           if weapon_id ~= 43 and weapon_id ~= 44 and weapon_id ~= 45 and weapon_id ~= 46 and weapon_id ~= 47 and weapon_id ~= 48 then goto skip end
@@ -34,7 +33,7 @@ function Grenade_Inventory()
                    local add_value = 13
                    if weapon_id == 43 or weapon_id == 44 or weapon_id == 47 then add_value = 12 end
                    if weapon_id == 46  then weapon_id = 48 end
-	           Render.WeaponIcon(weapon_id, Vector2.new(enemy_render.x + 1 + 25  + add_value * u - distance / 50,enemy_render.y  + 1 ), Color.new(yanser, yanseg, yanseb,1 * enemy:GetESPAlpha()) , 17)
+	           Render.WeaponIcon(weapon_id, Vector2.new(enemy_render.x + 1 + 25  + add_value * u - distance / 50,enemy_render.y  + 1 ), Color.new(top_color.r, top_color.g ,top_color.b,1 * enemy:GetESPAlpha()) , 17)
 	           ::skip::
 	        end
 	    end
